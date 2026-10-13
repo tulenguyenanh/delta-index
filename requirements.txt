@@ -1,9 +1,12 @@
-# Runtime dependencies (Phase 1: scrape & clean)
+# Runtime dependencies (Phase 1: scrape & clean; Phase 2: upload & assistant)
 httpx==0.28.1
 beautifulsoup4==4.15.0
 markdownify==1.2.3
-tenacity==9.2.1
+# tenacity is <9.2.0,>=8.2.3 because google-genai 2.30.0 requires that range;
+# the Phase 1 pin (==9.2.1) is mutually exclusive with it.
+tenacity>=8.2.3,<9.2.0
 python-dotenv==1.2.4
+google-genai==2.30.0
 
 # Dev / test tooling
 pytest==9.1.1
