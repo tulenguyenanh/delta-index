@@ -12,11 +12,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import httpx
+import pytest
 import respx
 
 from src.assistant import store as store_module
-from src.assistant.corpus import CorpusDoc
-from src.assistant.store import ensure_store
+from src.assistant.corpus import CorpusDoc, read_corpus
+from src.assistant.store import ensure_store, make_client
 from src.assistant.uploader import upload_corpus
 
 STORE = "fileSearchStores/test-store"
@@ -40,8 +41,8 @@ def _youtube_doc() -> CorpusDoc:
     )
 
 
-@respx.mock
-def test_upload_sends_source_url_metadata_and_returns_report(gemini_client) -> None:
+def _mock_upload() -> respx.Route:
+    """Register the two-step resumable-upload mock; return the initiate route."""
     initiate = respx.post(url__regex=r".*uploadToFileSearchStore.*").mock(
         return_value=httpx.Response(
             200,
@@ -63,6 +64,12 @@ def test_upload_sends_source_url_metadata_and_returns_report(gemini_client) -> N
             },
         )
     )
+    return initiate
+
+
+@respx.mock
+def test_upload_sends_source_url_metadata_and_returns_report(gemini_client) -> None:
+    initiate = _mock_upload()
 
     report = upload_corpus(gemini_client, STORE, [_youtube_doc()])
 
@@ -78,7 +85,39 @@ def test_upload_sends_source_url_metadata_and_returns_report(gemini_client) -> N
 
 
 @respx.mock
-def test_ensure_store_reuses_matching_display_name(gemini_client, monkeypatch) -> None:
+def test_all_metadata_keys(gemini_client) -> None:
+    """Every provenance key the upload contract promises is sent, with values."""
+    initiate = _mock_upload()
+
+    upload_corpus(gemini_client, STORE, [_youtube_doc()])
+
+    body = initiate.calls[0].request.content.decode("utf-8")
+    assert '"key": "source_url"' in body and SOURCE_URL in body
+    assert '"key": "article_id"' in body and "360051014713" in body
+    assert '"key": "title"' in body and "How to Use YouTube with OptiSigns" in body
+    assert '"key": "updated_at"' in body and "2026-09-24T14:52:18Z" in body
+
+
+@respx.mock
+def test_30_file_upload(gemini_client) -> None:
+    """The real corpus drives 30 uploads, each carrying its own source_url."""
+    docs = read_corpus()
+    assert len(docs) == 30
+
+    initiate = _mock_upload()
+    report = upload_corpus(gemini_client, STORE, docs)
+
+    assert report.files == 30
+    assert len(report.document_names) == 30
+    assert set(report.document_names) == {doc.slug for doc in docs}
+    assert initiate.call_count == 30  # one upload request per corpus file
+    for call in initiate.calls:
+        assert '"key": "source_url"' in call.request.content.decode("utf-8")
+
+
+@respx.mock
+def test_store_reuse(gemini_client, monkeypatch) -> None:
+    """A matching display_name is reused; create() is never called."""
     monkeypatch.setattr(store_module, "GEMINI_STORE_NAME", None)
     respx.get(url__regex=r".*fileSearchStores.*").mock(
         return_value=httpx.Response(
@@ -132,7 +171,9 @@ def test_ensure_store_creates_when_none_matches(gemini_client, monkeypatch) -> N
 
 @respx.mock
 def test_ensure_store_honors_full_name_override(gemini_client, monkeypatch) -> None:
-    monkeypatch.setattr(store_module, "GEMINI_STORE_NAME", "fileSearchStores/override-9")
+    monkeypatch.setattr(
+        store_module, "GEMINI_STORE_NAME", "fileSearchStores/override-9"
+    )
     list_route = respx.get(url__regex=r".*fileSearchStores.*").mock(
         return_value=httpx.Response(200, json={"fileSearchStores": []})
     )
@@ -141,3 +182,12 @@ def test_ensure_store_honors_full_name_override(gemini_client, monkeypatch) -> N
 
     assert name == "fileSearchStores/override-9"
     assert list_route.call_count == 0  # override short-circuits the lookup
+
+
+def test_missing_key(monkeypatch) -> None:
+    """With no key in the environment, make_client raises instead of faking one."""
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    with pytest.raises(ValueError):
+        make_client()

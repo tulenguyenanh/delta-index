@@ -1,4 +1,4 @@
-"""No-key chat tests: grounded citations and the null-grounding path.
+"""No-key chat tests: grounded citations, dedup/cap, fallback, no-grounding.
 
 ``respx`` intercepts google-genai's httpx transport, so the real SDK drives a
 mocked ``generateContent`` response.
@@ -22,6 +22,17 @@ YOUTUBE_URL = (
 OTHER_URL = "https://support.optisigns.com/hc/en-us/articles/360059386254"
 THIRD_URL = "https://support.optisigns.com/hc/en-us/articles/360060202914"
 FOURTH_URL = "https://support.optisigns.com/hc/en-us/articles/999"
+FALLBACK_URI = "https://support.optisigns.com/hc/en-us/articles/777"
+
+
+def _chunk(url: str) -> dict:
+    """A grounding chunk carrying ``url`` as its ``source_url`` custom metadata."""
+    return {
+        "retrievedContext": {
+            "customMetadata": [{"key": "source_url", "stringValue": url}]
+        }
+    }
+
 
 GROUNDED = {
     "candidates": [
@@ -32,42 +43,11 @@ GROUNDED = {
             },
             "groundingMetadata": {
                 "groundingChunks": [
-                    {
-                        "retrievedContext": {
-                            "customMetadata": [
-                                {"key": "source_url", "stringValue": YOUTUBE_URL},
-                                {"key": "article_id", "stringValue": "360051014713"},
-                            ]
-                        }
-                    },
-                    {
-                        "retrievedContext": {
-                            "customMetadata": [
-                                {"key": "source_url", "stringValue": OTHER_URL},
-                            ]
-                        }
-                    },
-                    {
-                        "retrievedContext": {
-                            "customMetadata": [
-                                {"key": "source_url", "stringValue": YOUTUBE_URL},
-                            ]
-                        }
-                    },
-                    {
-                        "retrievedContext": {
-                            "customMetadata": [
-                                {"key": "source_url", "stringValue": THIRD_URL},
-                            ]
-                        }
-                    },
-                    {
-                        "retrievedContext": {
-                            "customMetadata": [
-                                {"key": "source_url", "stringValue": FOURTH_URL},
-                            ]
-                        }
-                    },
+                    _chunk(YOUTUBE_URL),
+                    _chunk(OTHER_URL),
+                    _chunk(YOUTUBE_URL),  # repeat -> must be deduped
+                    _chunk(THIRD_URL),
+                    _chunk(FOURTH_URL),  # 4th distinct -> dropped by the cap
                 ]
             },
         }
@@ -85,28 +65,65 @@ UNGROUNDED = {
     ]
 }
 
+URI_FALLBACK = {
+    "candidates": [
+        {
+            "content": {
+                "role": "model",
+                "parts": [{"text": "See the linked doc."}],
+            },
+            "groundingMetadata": {
+                "groundingChunks": [
+                    {"retrievedContext": {"uri": FALLBACK_URI, "title": "Some Doc"}}
+                ]
+            },
+        }
+    ]
+}
+
 
 @respx.mock
-def test_ask_binds_prompt_and_returns_capped_distinct_citations(gemini_client) -> None:
+def test_dedup_and_cap(gemini_client) -> None:
+    respx.post(url__regex=GENERATE_URL).mock(
+        return_value=httpx.Response(200, json=GROUNDED)
+    )
+
+    _, urls = ask(gemini_client, STORE, "How do I add a YouTube video?")
+
+    # Order-preserving, the repeated URL collapses to one, capped at 3.
+    assert urls == [YOUTUBE_URL, OTHER_URL, THIRD_URL]
+    assert urls.count(YOUTUBE_URL) == 1
+    assert len(urls) == 3
+    assert FOURTH_URL not in urls
+
+
+@respx.mock
+def test_ask_binds_prompt_and_file_search_tool(gemini_client) -> None:
     route = respx.post(url__regex=GENERATE_URL).mock(
         return_value=httpx.Response(200, json=GROUNDED)
     )
 
-    text, urls = ask(gemini_client, STORE, "How do I add a YouTube video?")
-
-    assert text.startswith("Paste the YouTube link")
-    # Distinct, order-preserving, capped at 3 (the 4th distinct URL is dropped).
-    assert urls == [YOUTUBE_URL, OTHER_URL, THIRD_URL]
-    assert len(urls) == 3
-    assert FOURTH_URL not in urls
+    ask(gemini_client, STORE, "How do I add a YouTube video?")
 
     body = route.calls[0].request.content.decode("utf-8")
-    assert PROMPT_FRAGMENT in body  # ASST-01: verbatim prompt bound as system_instruction
+    assert PROMPT_FRAGMENT in body  # verbatim prompt bound as system_instruction
     assert "fileSearch" in body  # docs-only file_search tool, no web tool
 
 
 @respx.mock
-def test_ask_without_grounding_returns_no_citations(gemini_client) -> None:
+def test_uri_fallback(gemini_client) -> None:
+    """A chunk with no custom_metadata falls back to retrieved_context.uri."""
+    respx.post(url__regex=GENERATE_URL).mock(
+        return_value=httpx.Response(200, json=URI_FALLBACK)
+    )
+
+    _, urls = ask(gemini_client, STORE, "Which doc covers this?")
+
+    assert urls == [FALLBACK_URI]
+
+
+@respx.mock
+def test_no_grounding(gemini_client) -> None:
     respx.post(url__regex=GENERATE_URL).mock(
         return_value=httpx.Response(200, json=UNGROUNDED)
     )

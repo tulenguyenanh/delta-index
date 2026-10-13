@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from src.assistant.corpus import CorpusDoc, parse_front_matter, read_corpus
 
 YOUTUBE = Path("data") / "articles" / "how-to-use-youtube-with-optisigns.md"
@@ -36,3 +38,12 @@ def test_read_corpus_contains_the_youtube_doc() -> None:
     assert doc.source_url == SOURCE_URL
     assert doc.path.name == "how-to-use-youtube-with-optisigns.md"
     assert [d.slug for d in docs] == sorted(d.slug for d in docs)
+
+
+def test_missing_corpus(tmp_path: Path) -> None:
+    """An empty articles directory is a hard error, not a silent empty upload."""
+    empty = tmp_path / "articles"
+    empty.mkdir()
+
+    with pytest.raises(ValueError):
+        read_corpus(empty)
