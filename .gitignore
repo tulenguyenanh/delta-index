@@ -12,3 +12,7 @@ __pycache__/
 
 # GSD runtime state
 .gsd/
+
+# UI (frontend build artifacts)
+ui/node_modules/
+ui/dist/

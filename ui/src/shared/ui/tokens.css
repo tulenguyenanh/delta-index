@@ -1,0 +1,35 @@
+:root {
+  /* Brand */
+  --chat-primary: #554ec6;
+  --chat-accent: #5b4bfa;
+  --chat-dark-purple: #302e50;
+
+  /* Surfaces */
+  --chat-background: #ffffff;
+  --chat-bot-bubble: #f5f5ff;
+  --chat-user-bubble: #5b4bfa;
+
+  /* Typography */
+  --chat-text: #171725;
+  --chat-text-muted: #737789;
+  --chat-text-inverse: #ffffff;
+  --chat-font: "Inter", sans-serif;
+  --chat-font-size: 13px;
+  --chat-line-height: 1.45;
+
+  /* Borders */
+  --chat-border: #e1e1ea;
+
+  /* Radius */
+  --chat-radius-panel: 16px;
+  --chat-radius-bubble: 10px;
+  --chat-radius-input: 12px;
+
+  /* Shadows */
+  --chat-shadow: 0 8px 32px rgba(48, 46, 80, 0.06);
+
+  /* Spacing */
+  --chat-spacing-sm: 8px;
+  --chat-spacing-md: 12px;
+  --chat-spacing-lg: 20px;
+}
