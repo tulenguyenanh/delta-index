@@ -1,7 +1,10 @@
+import { ChatPanel } from '../../widgets/chat-panel/ChatPanel'
+import './HomePage.css'
+
 export default function HomePage() {
   return (
-    <h1 style={{ color: 'var(--chat-primary)', fontFamily: 'var(--chat-font)' }}>
-      OptiBot
-    </h1>
+    <main className="home">
+      <ChatPanel />
+    </main>
   )
 }
