@@ -81,9 +81,31 @@ def ask(
 
 
 def render(text: str, urls: list[str]) -> str:
-    """Append up to three distinct ``Article URL:`` lines to ``text``."""
-    lines = [text.rstrip()]
-    lines.extend(f"Article URL: {url}" for url in urls[:_MAX_CITATIONS])
+    """Append up to three distinct ``Article URL:`` lines to ``text``.
+
+    The verbatim system prompt already asks the model to cite up to three
+    ``Article URL:`` lines itself, so a grounding URL that the model has
+    *already* written into its answer is not appended a second time — the same
+    citation never appears twice. At most three distinct citations are shown in
+    total, and only grounding-supplied URLs are ever appended (nothing is
+    fabricated). When the model cited nothing, the grounding URLs supply the
+    citation lines.
+    """
+    body = text.rstrip()
+    # Grounding URLs the model already cited in its own answer text.
+    already_cited = sum(1 for url in urls if url in body)
+    # Append only distinct URLs the answer does not already contain, keeping the
+    # overall distinct-citation count at or below the cap.
+    budget = max(0, _MAX_CITATIONS - already_cited)
+    appended: list[str] = []
+    for url in urls:
+        if len(appended) >= budget:
+            break
+        if url in body or url in appended:
+            continue
+        appended.append(url)
+    lines = [body]
+    lines.extend(f"Article URL: {url}" for url in appended)
     return "\n".join(lines)
 
 

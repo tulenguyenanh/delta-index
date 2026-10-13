@@ -141,3 +141,35 @@ def test_render_appends_article_url_lines() -> None:
     assert rendered.splitlines()[0] == "Answer body."
     assert f"Article URL: {YOUTUBE_URL}" in rendered
     assert f"Article URL: {OTHER_URL}" in rendered
+
+
+def test_render_skips_url_already_in_answer() -> None:
+    """A URL the model already cited in its answer is not appended again."""
+    answer = f"See the guide.\nArticle URL:\n{YOUTUBE_URL}"
+
+    rendered = render(answer, [YOUTUBE_URL, OTHER_URL])
+
+    # The verbatim-prompt citation is kept exactly once; the distinct grounding
+    # URL is still appended, so the answer is not left without a citation.
+    assert rendered.count(YOUTUBE_URL) == 1
+    assert f"Article URL: {OTHER_URL}" in rendered
+
+
+def test_render_keeps_all_citations_when_model_cited_everything() -> None:
+    """When the model already cited every grounding URL, append nothing."""
+    answer = f"Body.\nArticle URL: {YOUTUBE_URL}"
+
+    rendered = render(answer, [YOUTUBE_URL])
+
+    assert rendered == answer
+    assert rendered.count("Article URL:") == 1
+
+
+def test_render_caps_total_distinct_citations_at_three() -> None:
+    """Model-cited URLs count toward the 3-citation cap."""
+    answer = f"Body.\nArticle URL: {YOUTUBE_URL}"
+
+    rendered = render(answer, [YOUTUBE_URL, OTHER_URL, THIRD_URL, FOURTH_URL])
+
+    assert rendered.count("Article URL:") == 3
+    assert FOURTH_URL not in rendered
