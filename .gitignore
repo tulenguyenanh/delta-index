@@ -1,0 +1,14 @@
+# Planning docs — local-only (per project instruction)
+.planning/
+.claude/
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# GSD runtime state
+.gsd/
