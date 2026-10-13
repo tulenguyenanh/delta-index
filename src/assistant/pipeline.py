@@ -27,7 +27,7 @@ def run(client: genai.Client | None = None) -> UploadReport:
     store_name = ensure_store(resolved, STORE_DISPLAY_NAME)
     report = upload_corpus(resolved, store_name, docs)
 
-    print(f"files_embedded={report.files}")
+    print(f"files_embedded={len(report.document_names)}")
     print(f"chunks_embedded_estimate={report.est_chunks}")
     print(f"store_name={store_name}")
     for slug, document_name in report.document_names.items():

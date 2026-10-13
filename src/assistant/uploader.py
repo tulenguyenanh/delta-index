@@ -37,12 +37,24 @@ class UploadReport:
 
 
 def estimate_chunks(
-    text: str, max_tokens_per_chunk: int, max_overlap_tokens: int
+    docs: list[CorpusDoc],
+    max_tokens_per_chunk: int = 400,
+    max_overlap_tokens: int = 40,
 ) -> int:
-    """Estimate chunk count for ``text`` under the configured chunking config."""
+    """Estimate the total chunk count for ``docs`` under the chunking config sent.
+
+    Pure function. The File Search API exposes **no** chunk count, so this is a
+    documented estimate, never the server's own number: each document
+    contributes ``max(1, ceil((chars // 4) / (max_tokens_per_chunk -
+    max_overlap_tokens)))``, where ``chars // 4`` approximates its token count.
+    """
     divisor = max(1, max_tokens_per_chunk - max_overlap_tokens)
-    tokens = len(text) // _CHARS_PER_TOKEN
-    return max(1, math.ceil(tokens / divisor))
+    total = 0
+    for doc in docs:
+        text = doc.path.read_text(encoding="utf-8")
+        tokens = len(text) // _CHARS_PER_TOKEN
+        total += max(1, math.ceil(tokens / divisor))
+    return total
 
 
 def upload_corpus(
@@ -54,7 +66,6 @@ def upload_corpus(
 ) -> UploadReport:
     """Upload every doc sequentially; return counts and per-slug document names."""
     files = 0
-    est_chunks = 0
     document_names: dict[str, str] = {}
 
     for doc in docs:
@@ -97,10 +108,11 @@ def upload_corpus(
 
         files += 1
         document_names[doc.slug] = operation.response.document_name
-        est_chunks += estimate_chunks(
-            doc.path.read_text(encoding="utf-8"),
-            max_tokens_per_chunk,
-            max_overlap_tokens,
-        )
 
-    return UploadReport(files=files, est_chunks=est_chunks, document_names=document_names)
+    # One estimate, computed once from the same docs — the CLI reports this
+    # exact number, so there is no second, divergent chunk computation.
+    return UploadReport(
+        files=files,
+        est_chunks=estimate_chunks(docs, max_tokens_per_chunk, max_overlap_tokens),
+        document_names=document_names,
+    )
