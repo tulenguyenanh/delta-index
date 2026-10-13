@@ -7,6 +7,8 @@ markdownify==1.2.3
 tenacity>=8.2.3,<9.2.0
 python-dotenv==1.2.4
 google-genai==2.30.0
+fastapi==0.143.0
+uvicorn[standard]==0.54.0
 
 # Dev / test tooling
 pytest==9.1.1
