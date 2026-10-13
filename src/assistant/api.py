@@ -1,8 +1,8 @@
 """FastAPI SSE endpoint for OptiBot.
 
-Run with ``uvicorn src.assistant.api:app --reload --port 8000`` (GOOGLE_API_KEY
-set) from the repo root, then ``cd ui && npm run dev``; the UI never sees the
-key. This module is additive — ``chat.py``, ``store.py``, ``config.py`` and
+Run with ``python -m uvicorn src.assistant.api:app --reload --port 8000``
+(GOOGLE_API_KEY set) from the repo root, then ``cd ui && npm run dev``; the UI
+never sees the key. This module is additive — ``chat.py``, ``store.py``, ``config.py`` and
 ``prompt.py`` are reused via relative imports, never modified.
 """
 

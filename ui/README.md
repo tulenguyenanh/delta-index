@@ -10,7 +10,7 @@ Both sides run from the repo root.
 **Backend** (requires `GOOGLE_API_KEY` in the environment):
 
 ```bash
-uvicorn src.assistant.api:app --reload --port 8000
+python -m uvicorn src.assistant.api:app --reload --port 8000
 ```
 
 **Frontend:**
