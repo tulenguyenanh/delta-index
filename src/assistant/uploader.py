@@ -2,10 +2,15 @@
 
 Each Markdown file is streamed straight into the store via
 ``upload_to_file_search_store`` with ``source_url`` (plus ``article_id`` /
-``title`` / ``updated_at``) attached as ``custom_metadata`` in the SAME call —
-metadata cannot be attached after the fact. The upload ``Operation`` is polled
-to completion with a bounded loop, and the returned document name is kept so
-Phase 3 can delete-then-recreate a changed document.
+``title`` / ``updated_at`` / ``content_sha256``) attached as ``custom_metadata``
+in the SAME call — metadata cannot be attached after the fact. The upload
+``Operation`` is polled to completion with a bounded loop, and the returned
+document name is kept so Phase 3 can delete-then-recreate a changed document.
+
+``content_sha256`` is read verbatim off the ``CorpusDoc`` (computed once by
+``read_corpus``); this module never re-reads the file and never imports from
+``delta.py``, so the hash the store records is the same one the daily job
+compares against on its next run.
 """
 
 from __future__ import annotations
@@ -82,6 +87,9 @@ def upload_corpus(
                     ),
                     types.CustomMetadata(key="title", string_value=doc.title),
                     types.CustomMetadata(key="updated_at", string_value=doc.updated_at),
+                    types.CustomMetadata(
+                        key="content_sha256", string_value=doc.content_sha256
+                    ),
                 ],
                 chunking_config=types.ChunkingConfig(
                     white_space_config=types.WhiteSpaceConfig(

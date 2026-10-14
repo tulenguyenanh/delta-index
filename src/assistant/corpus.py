@@ -11,6 +11,7 @@ Pure module — no network, no clock. It reads committed first-party files only.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,7 +21,13 @@ ARTICLES_DIR = Path("data") / "articles"
 
 @dataclass(frozen=True)
 class CorpusDoc:
-    """One cleaned corpus article plus the provenance the upload needs."""
+    """One cleaned corpus article plus the provenance the upload needs.
+
+    ``content_sha256`` is the article file's fresh digest, computed once in
+    :func:`read_corpus` and read from here by every consumer (the upload's
+    metadata and the delta classifier) — no consumer re-reads the file, so the
+    value a run compares against can never diverge from the value it uploads.
+    """
 
     article_id: int
     title: str
@@ -28,6 +35,7 @@ class CorpusDoc:
     updated_at: str
     slug: str
     path: Path
+    content_sha256: str
 
 
 def parse_front_matter(md_path: Path) -> dict[str, str]:
@@ -64,6 +72,9 @@ def read_corpus(articles_dir: Path | None = None) -> list[CorpusDoc]:
                 updated_at=fields["updated_at"],
                 slug=path.stem,
                 path=path,
+                # The ONE place the fresh corpus hash is computed. Phase 1's
+                # byte-stable writes are what make hash equality meaningful.
+                content_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
             )
         )
     return docs
