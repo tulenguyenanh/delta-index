@@ -1,0 +1,17 @@
+# Secrets must never enter an image layer.
+.env
+.git
+.gitattributes
+.planning
+.gsd
+.claude
+
+# Not needed at runtime (keep the build context small).
+tests
+ui
+evidence
+design.md
+optibot.html
+*.docx.md
+*.docx.pdf
+.env.sample
