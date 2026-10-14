@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from google import genai
 from google.genai import types
+from google.genai.errors import ClientError
 
 from .chat import extract_source_urls
 from .config import GEMINI_MODEL, STORE_DISPLAY_NAME
@@ -29,6 +30,7 @@ from .store import ensure_store, make_client
 # key/transport details into the browser).
 _ERROR_NO_KEY = "OptiBot is unavailable: GOOGLE_API_KEY is not set on the backend."
 _ERROR_UNAVAILABLE = "OptiBot is unavailable right now. Please try again in a moment."
+_ERROR_QUOTA = "OptiBot has reached its daily Gemini quota. Please try again later."
 _ERROR_MISSING_QUESTION = "Missing question."
 
 _SSE_HEADERS = {"Cache-Control": "no-cache", "Connection": "keep-alive"}
@@ -121,6 +123,11 @@ def stream_answer(
         urls = extract_source_urls(aggregated)
         yield _sse("citations", json.dumps(urls))
         yield _sse("done")
+    except ClientError as exc:  # noqa: BLE001 — a 429 quota limit is non-sensitive and self-explanatory
+        if exc.code == 429:
+            yield _sse("error", json.dumps(_ERROR_QUOTA))
+        else:
+            yield _sse("error", json.dumps(_ERROR_UNAVAILABLE))
     except Exception:  # noqa: BLE001 — a friendly event, never str(exc)
         yield _sse("error", json.dumps(_ERROR_UNAVAILABLE))
 

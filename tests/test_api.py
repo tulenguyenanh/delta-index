@@ -10,6 +10,7 @@ import json
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
+from google.genai.errors import ClientError
 
 from src.assistant.api import app, stream_answer
 
@@ -42,6 +43,13 @@ def _fake_client(chunks: list[SimpleNamespace]) -> SimpleNamespace:
             generate_content_stream=lambda **kwargs: iter(chunks)
         )
     )
+
+
+def _raising_client(exc: Exception) -> SimpleNamespace:
+    def boom(**kwargs):
+        raise exc
+
+    return SimpleNamespace(models=SimpleNamespace(generate_content_stream=boom))
 
 
 def test_missing_question_emits_error_event() -> None:
@@ -87,3 +95,29 @@ def test_stream_answer_missing_key_emits_error(monkeypatch) -> None:
 
     assert events[0].startswith("event: error")
     assert "GOOGLE_API_KEY" in events[0]
+
+
+def test_stream_answer_quota_emits_quota_error() -> None:
+    client = _raising_client(
+        ClientError(429, {"error": {"code": 429, "status": "RESOURCE_EXHAUSTED"}})
+    )
+
+    events = list(stream_answer("q", client=client, store_name="fileSearchStores/test"))
+
+    assert len(events) == 1
+    assert events[0].startswith("event: error")
+    assert "quota" in events[0].lower()
+    assert "unavailable right now" not in events[0]
+
+
+def test_stream_answer_other_client_error_emits_unavailable() -> None:
+    client = _raising_client(
+        ClientError(500, {"error": {"code": 500, "status": "INTERNAL"}})
+    )
+
+    events = list(stream_answer("q", client=client, store_name="fileSearchStores/test"))
+
+    assert len(events) == 1
+    assert events[0].startswith("event: error")
+    assert "unavailable right now" in events[0]
+    assert "quota" not in events[0].lower()
