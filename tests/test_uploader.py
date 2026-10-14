@@ -9,6 +9,7 @@ must carry ``X-Goog-Upload-URL`` and the follow-up response must carry
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import httpx
@@ -38,6 +39,7 @@ def _youtube_doc() -> CorpusDoc:
         updated_at="2026-09-24T14:52:18Z",
         slug="how-to-use-youtube-with-optisigns",
         path=YOUTUBE,
+        content_sha256=hashlib.sha256(YOUTUBE.read_bytes()).hexdigest(),
     )
 
 
@@ -96,6 +98,9 @@ def test_all_metadata_keys(gemini_client) -> None:
     assert '"key": "article_id"' in body and "360051014713" in body
     assert '"key": "title"' in body and "How to Use YouTube with OptiSigns" in body
     assert '"key": "updated_at"' in body and "2026-09-24T14:52:18Z" in body
+    # Phase 3: the delta comparison key rides along with the provenance keys.
+    assert '"key": "content_sha256"' in body
+    assert _youtube_doc().content_sha256 in body
 
 
 @respx.mock
