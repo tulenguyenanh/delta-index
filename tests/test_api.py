@@ -9,10 +9,22 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 from google.genai.errors import ClientError
 
 from src.assistant.api import app, stream_answer
+
+
+@pytest.fixture(autouse=True)
+def _dummy_api_key(monkeypatch) -> None:
+    """Pass the key gate with a placeholder so these tests need no local env file.
+
+    Without it the suite only passed where a developer's env file supplied a key;
+    a fresh clone failed four ``stream_answer`` tests. The missing-key test
+    deletes the variable itself, which runs after this fixture.
+    """
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
 
 
 def _grounding_chunk(url: str) -> SimpleNamespace:
