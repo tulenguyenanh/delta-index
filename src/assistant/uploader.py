@@ -11,6 +11,10 @@ document name is kept so Phase 3 can delete-then-recreate a changed document.
 ``read_corpus``); this module never re-reads the file and never imports from
 ``delta.py``, so the hash the store records is the same one the daily job
 compares against on its next run.
+
+Starting an upload and refreshing its ``Operation`` both go through the shared
+``RETRY`` policy, so a 429 or 5xx is retried with backoff instead of failing
+the run. A failed start creates no document, so retrying it cannot duplicate.
 """
 
 from __future__ import annotations
@@ -18,11 +22,15 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 
 from google import genai
 from google.genai import types
+from tenacity import retry
 
 from .corpus import CorpusDoc
+from .retries import RETRY
 
 # chars/4 approximates tokens. The File Search API exposes NO chunk count, so
 # the reported number is a labelled estimate derived from the chunking_config
@@ -62,6 +70,25 @@ def estimate_chunks(
     return total
 
 
+@retry(**RETRY)
+def _start_upload(
+    client: genai.Client,
+    store_name: str,
+    path: Path,
+    config: types.UploadToFileSearchStoreConfig,
+) -> Any:
+    """Start one upload and return its long-running ``Operation``."""
+    return client.file_search_stores.upload_to_file_search_store(
+        file_search_store_name=store_name, file=str(path), config=config
+    )
+
+
+@retry(**RETRY)
+def _refresh(client: genai.Client, operation: Any) -> Any:
+    """Return the latest state of an upload ``Operation``."""
+    return client.operations.get(operation)
+
+
 def upload_corpus(
     client: genai.Client,
     store_name: str,
@@ -74,31 +101,28 @@ def upload_corpus(
     document_names: dict[str, str] = {}
 
     for doc in docs:
-        operation = client.file_search_stores.upload_to_file_search_store(
-            file_search_store_name=store_name,
-            file=str(doc.path),
-            config=types.UploadToFileSearchStoreConfig(
-                display_name=doc.slug,
-                mime_type="text/markdown",
-                custom_metadata=[
-                    types.CustomMetadata(key="source_url", string_value=doc.source_url),
-                    types.CustomMetadata(
-                        key="article_id", string_value=str(doc.article_id)
-                    ),
-                    types.CustomMetadata(key="title", string_value=doc.title),
-                    types.CustomMetadata(key="updated_at", string_value=doc.updated_at),
-                    types.CustomMetadata(
-                        key="content_sha256", string_value=doc.content_sha256
-                    ),
-                ],
-                chunking_config=types.ChunkingConfig(
-                    white_space_config=types.WhiteSpaceConfig(
-                        max_tokens_per_chunk=max_tokens_per_chunk,
-                        max_overlap_tokens=max_overlap_tokens,
-                    )
+        config = types.UploadToFileSearchStoreConfig(
+            display_name=doc.slug,
+            mime_type="text/markdown",
+            custom_metadata=[
+                types.CustomMetadata(key="source_url", string_value=doc.source_url),
+                types.CustomMetadata(
+                    key="article_id", string_value=str(doc.article_id)
                 ),
+                types.CustomMetadata(key="title", string_value=doc.title),
+                types.CustomMetadata(key="updated_at", string_value=doc.updated_at),
+                types.CustomMetadata(
+                    key="content_sha256", string_value=doc.content_sha256
+                ),
+            ],
+            chunking_config=types.ChunkingConfig(
+                white_space_config=types.WhiteSpaceConfig(
+                    max_tokens_per_chunk=max_tokens_per_chunk,
+                    max_overlap_tokens=max_overlap_tokens,
+                )
             ),
         )
+        operation = _start_upload(client, store_name, doc.path, config)
 
         polls = 0
         while not operation.done:
@@ -109,7 +133,7 @@ def upload_corpus(
                     f"{_MAX_POLL_ITERATIONS} polls"
                 )
             time.sleep(_POLL_INTERVAL_SECONDS)
-            operation = client.operations.get(operation)
+            operation = _refresh(client, operation)
 
         if operation.error:
             raise RuntimeError(f"upload failed for {doc.slug}: {operation.error}")

@@ -14,26 +14,12 @@ from __future__ import annotations
 
 from typing import Any
 
-import httpx
 from google import genai
 from google.genai import types
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
+from tenacity import retry
 
 from .config import GEMINI_STORE_NAME
-
-# Same bounded-retry idiom as src/scraper/zendesk.py, applied to the store
-# list/create calls so a transient transport error is retried with backoff.
-_RETRY = {
-    "stop": stop_after_attempt(5),
-    "wait": wait_exponential(multiplier=1, max=30),
-    "retry": retry_if_exception_type((httpx.TransportError, httpx.HTTPStatusError)),
-    "reraise": True,
-}
+from .retries import RETRY as _RETRY
 
 
 def make_client(client: genai.Client | None = None) -> genai.Client:

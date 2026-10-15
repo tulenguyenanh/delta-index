@@ -15,9 +15,13 @@ from pathlib import Path
 import httpx
 import pytest
 import respx
+from google.genai import errors
+from tenacity import wait_none
 
 from src.assistant import store as store_module
+from src.assistant import uploader as uploader_module
 from src.assistant.corpus import CorpusDoc, read_corpus
+from src.assistant.retries import is_transient
 from src.assistant.store import ensure_store, make_client
 from src.assistant.uploader import upload_corpus
 
@@ -196,3 +200,58 @@ def test_missing_key(monkeypatch) -> None:
 
     with pytest.raises(ValueError):
         make_client()
+
+
+# --- retry policy: Gemini's own error types, not just httpx ---------------------
+
+
+def _api_error(cls: type[errors.APIError], code: int) -> errors.APIError:
+    return cls(code, {"error": {"code": code, "message": "x", "status": "X"}})
+
+
+@pytest.mark.parametrize(
+    ("exc", "expected"),
+    [
+        (_api_error(errors.ClientError, 429), True),
+        (_api_error(errors.ServerError, 503), True),
+        (_api_error(errors.ServerError, 500), True),
+        (_api_error(errors.ClientError, 400), False),
+        (_api_error(errors.ClientError, 404), False),
+        (httpx.ConnectError("boom"), True),
+        (ValueError("not an API error"), False),
+    ],
+)
+def test_is_transient(exc: BaseException, expected: bool) -> None:
+    assert is_transient(exc) is expected
+
+
+def _error_response(code: int) -> httpx.Response:
+    return httpx.Response(
+        code, json={"error": {"code": code, "message": "x", "status": "X"}}
+    )
+
+
+@respx.mock
+def test_upload_retries_transient_503(gemini_client, monkeypatch) -> None:
+    """A 503 on the upload start is retried, and the second attempt succeeds."""
+    monkeypatch.setattr(uploader_module._start_upload.retry, "wait", wait_none())
+    initiate = _mock_upload()
+    initiate.side_effect = [_error_response(503), initiate.return_value]
+
+    report = upload_corpus(gemini_client, STORE, [_youtube_doc()])
+
+    assert report.files == 1
+    assert initiate.call_count == 2
+
+
+@respx.mock
+def test_upload_does_not_retry_client_error(gemini_client, monkeypatch) -> None:
+    """A 400 cannot succeed on retry, so it surfaces after exactly one attempt."""
+    monkeypatch.setattr(uploader_module._start_upload.retry, "wait", wait_none())
+    initiate = _mock_upload()
+    initiate.side_effect = [_error_response(400)]
+
+    with pytest.raises(errors.ClientError):
+        upload_corpus(gemini_client, STORE, [_youtube_doc()])
+
+    assert initiate.call_count == 1
