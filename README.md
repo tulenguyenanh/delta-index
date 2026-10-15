@@ -36,9 +36,9 @@ GitHub Actions runs `.github/workflows/daily-sync.yml` on `17 6 * * *` (daily 06
 
 ## Sample answer
 
-![CLI output of python -m src.assistant.chat for "How do I add a YouTube video?" with a cited Article URL](evidence/optibot-cited-answer.png)
+![Rendered output of a live python -m src.assistant.chat run answering "How do I add a YouTube video?" with a cited Article URL](evidence/optibot-cited-answer.png)
 
-Captured terminal output.
+Rendered output of a live `python -m src.assistant.chat` run (2026-10-13, model gemini-3.7-flash; the default is now gemini-3.8-flash), framed with a header chat.py does not print.
 
 ## Known limits
 
