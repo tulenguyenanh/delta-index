@@ -55,10 +55,10 @@ def run(article_ids: list[int] | None = None) -> list[Path]:
     """Fetch, select, and write articles; emit the sha256 manifest.
 
     With ``article_ids`` unset the full pinned corpus is selected via
-    :func:`selection.select` and ``data/manifest.json`` is (re)written. With a
-    list of ids the tracer path is unchanged: those articles are written and no
-    manifest is touched (a single-article run must not clobber the corpus
-    manifest).
+    :func:`selection.select`, files this run did not write are pruned, and
+    ``data/manifest.json`` is (re)written. With a list of ids the tracer path is
+    unchanged: those articles are written and nothing else is touched (a
+    single-article run must not clobber the corpus or its manifest).
     """
     articles = fetch_articles()
     if article_ids is None:
@@ -72,8 +72,23 @@ def run(article_ids: list[int] | None = None) -> list[Path]:
     paths = [write_article(article, seen) for article in articles]
 
     if article_ids is None:
+        prune_stale(paths)
         write_manifest({path.stem: _sha256(path) for path in paths})
     return paths
+
+
+def prune_stale(written: list[Path]) -> None:
+    """Delete every corpus file a full run did not write.
+
+    A retitled article gets a new slug, so without this its old ``<slug>.md``
+    stays on disk, the delta job uploads both, and the store answers from the
+    stale copy forever. After pruning, ``data/articles`` holds exactly the
+    selected corpus.
+    """
+    keep = {path.name for path in written}
+    for path in ARTICLES_DIR.glob("*.md"):
+        if path.name not in keep:
+            path.unlink()
 
 
 def _sha256(path: Path) -> str:

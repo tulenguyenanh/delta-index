@@ -10,9 +10,12 @@ fallbacks for documents uploaded before the hash key existed.
 
 ``apply_delta`` is the only mutating part: for every changed slug it deletes
 the existing document FIRST (``force=True``) and only then re-uploads, so the
-store never transiently holds two copies of one slug. Nothing is wrapped in a
-catch-and-continue — an exception propagates so the PaaS marks the run failed
-and the log tells the truth.
+store never transiently holds two copies of one slug. Store documents whose
+slug is no longer in the corpus (a retitled or dropped article) are deleted
+LAST, after every upload succeeded, so a failed run never removes the old copy
+before its replacement exists. Nothing is wrapped in a catch-and-continue — an
+exception propagates so the scheduler marks the run failed and the log tells
+the truth.
 
 Pure classifier, mutating applier; no clock, no logging.
 """
@@ -47,6 +50,7 @@ class DeltaCounts:
     added: int
     updated: int
     skipped: int
+    deleted: int = 0
 
 
 @dataclass
@@ -55,11 +59,13 @@ class DeltaPlan:
 
     ``updated`` pairs each changed corpus doc with the existing document's
     ``.name`` so the applier can delete the right document before re-uploading.
+    ``deleted`` holds the ``.name`` of every store document with no corpus file.
     """
 
     added: list[CorpusDoc] = field(default_factory=list)
     updated: list[tuple[CorpusDoc, str]] = field(default_factory=list)
     skipped: list[CorpusDoc] = field(default_factory=list)
+    deleted: list[str] = field(default_factory=list)
 
 
 def classify(docs: list[CorpusDoc], existing: dict[str, Any]) -> DeltaPlan:
@@ -78,6 +84,7 @@ def classify(docs: list[CorpusDoc], existing: dict[str, Any]) -> DeltaPlan:
 
     An equal comparison lands the doc in ``skipped``; a different one lands it
     in ``updated``, carrying the existing document's ``.name`` for the delete.
+    Finally, every store slug with no corpus doc lands in ``deleted``.
     """
     plan = DeltaPlan()
     for doc in sorted(docs, key=lambda item: item.slug):
@@ -97,26 +104,33 @@ def classify(docs: list[CorpusDoc], existing: dict[str, Any]) -> DeltaPlan:
             plan.updated.append((doc, document.name))
         else:
             plan.skipped.append(doc)
+    slugs = {doc.slug for doc in docs}
+    plan.deleted = [
+        existing[slug].name for slug in sorted(existing) if slug not in slugs
+    ]
     return plan
 
 
 def apply_delta(
     client: genai.Client, store_name: str, plan: DeltaPlan
 ) -> DeltaCounts:
-    """Delete-then-recreate every updated slug, then upload the added ones.
+    """Delete-then-recreate every updated slug, upload the added ones, prune.
 
     For each ``(doc, name)`` in ``plan.updated`` the existing document is
     deleted BEFORE its replacement is uploaded, so the store never holds two
-    copies of one slug. Added docs are uploaded after. Exceptions are never
-    swallowed — the caller's non-zero exit is what makes the PaaS mark the run
-    failed.
+    copies of one slug. Added docs are uploaded after, and documents with no
+    corpus file are deleted last. Exceptions are never swallowed — the caller's
+    non-zero exit is what makes the scheduler mark the run failed.
     """
     for doc, document_name in plan.updated:
         delete_document(client, document_name)
         upload_corpus(client, store_name, [doc])
     upload_corpus(client, store_name, plan.added)
+    for document_name in plan.deleted:
+        delete_document(client, document_name)
     return DeltaCounts(
         added=len(plan.added),
         updated=len(plan.updated),
         skipped=len(plan.skipped),
+        deleted=len(plan.deleted),
     )

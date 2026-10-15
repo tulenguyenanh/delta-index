@@ -124,6 +124,19 @@ def test_classify_no_metadata_treated_as_changed() -> None:
     assert plan.skipped == []
 
 
+def test_classify_marks_orphans_deleted() -> None:
+    """A store slug with no corpus doc (retitled/dropped article) is deleted."""
+    existing = {
+        "a": _existing(f"{STORE}/documents/a", "a", content_sha256="fresh"),
+        "old-a": _existing(f"{STORE}/documents/old-a", "old-a", content_sha256="x"),
+    }
+
+    plan = classify([_doc("a")], existing)
+
+    assert [doc.slug for doc in plan.skipped] == ["a"]
+    assert plan.deleted == [f"{STORE}/documents/old-a"]
+
+
 # --- apply_delta mutates: real SDK under respx --------------------------------
 
 
@@ -205,6 +218,23 @@ def test_apply_delta_counts(gemini_client) -> None:
     assert counts == DeltaCounts(added=1, updated=1, skipped=1)
     assert delete.call_count == 1  # only the updated slug is deleted
     assert initiate.call_count == 2  # one re-upload (updated) + one add
+
+
+@respx.mock
+def test_apply_delta_deletes_orphans_after_uploads(gemini_client) -> None:
+    """A retitled article: the new slug uploads FIRST, the old document goes last."""
+    respx.delete(url__regex=r".*/documents/.*").mock(
+        return_value=httpx.Response(200, json={})
+    )
+    _mock_upload()
+
+    plan = DeltaPlan(added=[read_corpus()[0]], deleted=[f"{STORE}/documents/old-a"])
+
+    counts = apply_delta(gemini_client, STORE, plan)
+
+    assert counts == DeltaCounts(added=1, updated=0, skipped=0, deleted=1)
+    order = [call.request.method for call in respx.calls]
+    assert order.index("DELETE") > order.index("POST")
 
 
 # --- main.py policy -----------------------------------------------------------

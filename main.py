@@ -5,9 +5,9 @@ Composes the whole path in one process::
     scrape -> read_corpus -> ensure_store -> list_store_documents
            -> classify -> apply_delta -> one counts line -> exit 0
 
-The single printed ``added=N updated=N skipped=N store_name=...`` line is the
-job's observable artifact (Render captures stdout) and is derived from the real
-``DeltaCounts``, never fabricated. Errors are not swallowed: a missing pinned
+The single printed ``added=N updated=N skipped=N deleted=N store_name=...``
+line is the job's observable artifact (the GitHub Actions run log captures
+stdout) and is derived from the real ``DeltaCounts``, never fabricated. Errors are not swallowed: a missing pinned
 article prints a distinct ``FATAL:`` line and re-raises, so the platform marks
 the run failed instead of recording a silent shortfall.
 
@@ -62,7 +62,7 @@ def main() -> int:
 
     print(
         f"added={counts.added} updated={counts.updated} "
-        f"skipped={counts.skipped} store_name={store_name}"
+        f"skipped={counts.skipped} deleted={counts.deleted} store_name={store_name}"
     )
 
     # A convenience artifact for local runs; in-container it dies with the
@@ -72,6 +72,7 @@ def main() -> int:
             "added": counts.added,
             "updated": counts.updated,
             "skipped": counts.skipped,
+            "deleted": counts.deleted,
             "store_name": store_name,
             "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         },

@@ -106,3 +106,19 @@ def test_updated_at_preserved() -> None:
     block = front_matter(_article(updated_at=timestamp))
 
     assert f'updated_at: "{timestamp}"' in block
+
+
+def test_prune_stale_removes_unwritten_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A retitled article's old file is deleted; the files just written survive."""
+    articles = tmp_path / "articles"
+    monkeypatch.setattr(pipeline, "ARTICLES_DIR", articles)
+    written = write_article(_article(id="1", title="New Title"))
+    stale = articles / "old-title.md"
+    stale.write_text("stale", encoding="utf-8")
+
+    pipeline.prune_stale([written])
+
+    assert written.exists()
+    assert not stale.exists()
