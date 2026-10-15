@@ -16,3 +16,9 @@ __pycache__/
 # UI (frontend build artifacts)
 ui/node_modules/
 ui/dist/
+
+# Reference inputs / employer brief (never commit)
+design.md
+optibot.html
+*.docx.md
+*.docx.pdf
