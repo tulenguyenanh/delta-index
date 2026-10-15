@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Message } from '../../entities/message/message'
-import { initialMessages } from '../../entities/message/mockMessages'
 
 const UNREACHABLE_MESSAGE =
   "I can't reach my brain right now — the assistant backend seems to be down. Please try again in a moment."
+const EMPTY_ANSWER_MESSAGE =
+  "I couldn't find an answer to that. Please try rephrasing your question."
 
 function nowTimestamp(): string {
   return new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
@@ -30,7 +31,7 @@ export interface UseChatResult {
 }
 
 export function useChat(): UseChatResult {
-  const [messages, setMessages] = useState<Message[]>(initialMessages)
+  const [messages, setMessages] = useState<Message[]>([])
   const [isTyping, setIsTyping] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const idRef = useRef(0)
@@ -70,6 +71,13 @@ export function useChat(): UseChatResult {
         prev.map((message) =>
           message.id === placeholderId ? updater(message) : message,
         ),
+      )
+    }
+
+    // A finished reply must never stay blank: MessageList hides blank assistant text.
+    const fillIfBlank = () => {
+      updatePlaceholder((message) =>
+        message.text.trim() === '' ? { ...message, text: EMPTY_ANSWER_MESSAGE } : message,
       )
     }
 
@@ -118,6 +126,7 @@ export function useChat(): UseChatResult {
               const urls = JSON.parse(data) as string[]
               updatePlaceholder((message) => ({ ...message, searchedSources: urls.length }))
             } else if (event === 'done') {
+              fillIfBlank()
               setIsTyping(false)
               return
             } else if (event === 'error') {
@@ -130,6 +139,7 @@ export function useChat(): UseChatResult {
         }
 
         // Stream ended without a `done` event — settle the typing state.
+        fillIfBlank()
         setIsTyping(false)
       } catch {
         if (!controller.signal.aborted) {
