@@ -1,10 +1,12 @@
 import type { Message } from '../../entities/message/message'
 import { BotIcon } from '../../shared/ui/icons'
 import { FeedbackButtons } from './FeedbackButtons'
+import { TypingIndicator } from './TypingIndicator'
 import './chat.css'
 
 interface MessageListProps {
   messages: Message[]
+  isTyping: boolean
   onToggleFeedback: (id: string, value: 'up' | 'down') => void
 }
 
@@ -25,7 +27,7 @@ function MessageText({ text }: { text: string }) {
   )
 }
 
-export function MessageList({ messages, onToggleFeedback }: MessageListProps) {
+export function MessageList({ messages, isTyping, onToggleFeedback }: MessageListProps) {
   return (
     <div className="chat-message-list">
       {messages.map((message) => {
@@ -36,6 +38,10 @@ export function MessageList({ messages, onToggleFeedback }: MessageListProps) {
               <span className="chat-timestamp chat-timestamp--right">{message.timestamp}</span>
             </div>
           )
+        }
+
+        if (message.text.trim() === '') {
+          return null
         }
 
         return (
@@ -69,6 +75,7 @@ export function MessageList({ messages, onToggleFeedback }: MessageListProps) {
           </div>
         )
       })}
+      {isTyping && <TypingIndicator />}
     </div>
   )
 }

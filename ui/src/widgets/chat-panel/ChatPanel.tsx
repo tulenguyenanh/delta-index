@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useChat } from '../../features/chat/useChat'
 import { MessageList } from '../../features/chat/MessageList'
 import { Composer } from '../../features/chat/Composer'
-import { TypingIndicator } from '../../features/chat/TypingIndicator'
 import { BotIcon, ChevronDownIcon, ChevronUpIcon, HeadsetIcon } from '../../shared/ui/icons'
 import './ChatPanel.css'
 
@@ -53,8 +52,11 @@ export function ChatPanel() {
         </section>
 
         <div className="chat-panel__scroll">
-          <MessageList messages={messages} onToggleFeedback={toggleFeedback} />
-          {isTyping && <TypingIndicator />}
+          <MessageList
+            messages={messages}
+            isTyping={isTyping}
+            onToggleFeedback={toggleFeedback}
+          />
         </div>
 
         <footer className="chat-panel__footer">
