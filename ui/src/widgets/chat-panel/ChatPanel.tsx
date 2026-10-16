@@ -3,11 +3,13 @@ import { useChat } from '../../features/chat/useChat'
 import { MessageList } from '../../features/chat/MessageList'
 import { Composer } from '../../features/chat/Composer'
 import { BotIcon, ChevronDownIcon, ChevronUpIcon, HeadsetIcon } from '../../shared/ui/icons'
+import { useStickToBottom } from './useStickToBottom'
 import './ChatPanel.css'
 
 export function ChatPanel() {
   const { messages, isTyping, sendMessage, toggleFeedback } = useChat()
   const [supportOpen, setSupportOpen] = useState(true)
+  const { ref: scrollRef, onScroll: handleScroll } = useStickToBottom<HTMLDivElement>()
 
   return (
     <div className="chat-panel" role="complementary" aria-label="OptiBot">
@@ -51,7 +53,7 @@ export function ChatPanel() {
           </div>
         </section>
 
-        <div className="chat-panel__scroll">
+        <div className="chat-panel__scroll" ref={scrollRef} onScroll={handleScroll}>
           <MessageList
             messages={messages}
             isTyping={isTyping}
