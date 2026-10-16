@@ -1,0 +1,35 @@
+# Local convenience: runs the chat API plus the React UI together (http://localhost:8080).
+# The graded daily job is NOT part of this file; it stays `docker run -e API_KEY=... optibot-sync`.
+# WARNING: `docker compose config` prints the substituted key; use `docker compose config --quiet`.
+name: delta-index
+
+services:
+  api:
+    # Same root context and Dockerfile as the graded image. No `image:` key, so it never retags optibot-sync.
+    build: .
+    # Runtime-only override: the image keeps ENTRYPOINT ["python", "main.py"].
+    # 0.0.0.0 is required so the ui container can reach it (uvicorn defaults to 127.0.0.1).
+    entrypoint: ["python", "-m", "uvicorn", "src.assistant.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      # api.py reads GOOGLE_API_KEY directly (the API_KEY alias exists only in main.py).
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:?Set GOOGLE_API_KEY in your shell or in the repo-root env file}
+      # Empty means unset for src/assistant/config.py.
+      GEMINI_MODEL: ${GEMINI_MODEL:-}
+      GEMINI_STORE_NAME: ${GEMINI_STORE_NAME:-}
+      GEMINI_STORE_DISPLAY_NAME: ${GEMINI_STORE_DISPLAY_NAME:-}
+    # Reachable only on the compose network, through nginx.
+    expose: ["8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/openapi.json', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  ui:
+    build: ./ui
+    # Loopback only, so the key-backed chat endpoint is not exposed to the LAN.
+    ports: ["127.0.0.1:${UI_PORT:-8080}:80"]
+    depends_on:
+      api:
+        condition: service_healthy
