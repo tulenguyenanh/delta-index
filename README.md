@@ -14,9 +14,10 @@ python -m src.assistant.chat "How do I add a YouTube video?"
 python -m pytest -q   # offline, no key needed
 docker build -t optibot-sync .
 docker run --rm -e API_KEY=<your-gemini-key> optibot-sync   # entrypoint is python main.py; runs once, exits 0
+docker compose up --build   # chat API + React UI at http://localhost:8080 (needs GOOGLE_API_KEY; see ui/README.md)
 ```
 
-By design, the first run against an empty store uploads all 30 articles (`added=30`) and later runs with no upstream change print `skipped=30`. A local run rewrites the tracked `last-run.json`. The optional React chat UI is in [ui/README.md](ui/README.md).
+By design, the first run against an empty store uploads all 30 articles (`added=30`) and later runs with no upstream change print `skipped=30`. A local run rewrites the tracked `last-run.json`. The optional React chat UI is in [ui/README.md](ui/README.md); `docker compose up --build` runs it together with the chat API, and the graded sync job stays the `docker run` above.
 
 ## How it works
 
