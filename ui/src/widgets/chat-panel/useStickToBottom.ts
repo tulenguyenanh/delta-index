@@ -2,13 +2,16 @@ import { useCallback, useLayoutEffect, useRef, type RefObject } from 'react'
 
 const NEAR_BOTTOM_PX = 48
 
-export function useStickToBottom<T extends HTMLElement>(): {
+// jumpKey: when this value changes, the container is forced back to the bottom,
+// whatever the user's current scroll position.
+export function useStickToBottom<T extends HTMLElement>(jumpKey: number): {
   ref: RefObject<T>
   onScroll: () => void
 } {
   const ref = useRef<T>(null)
   // A ref, not state: scroll events must not trigger re-renders.
   const pinnedRef = useRef(true)
+  const lastJumpKeyRef = useRef(jumpKey)
 
   const onScroll = useCallback(() => {
     const el = ref.current
@@ -22,6 +25,10 @@ export function useStickToBottom<T extends HTMLElement>(): {
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
+    if (jumpKey !== lastJumpKeyRef.current) {
+      lastJumpKeyRef.current = jumpKey
+      pinnedRef.current = true
+    }
     if (pinnedRef.current) {
       // Intentionally instant (no animation): mid-animation scroll events would wrongly
       // unpin during streaming, and instant scrolling respects reduced-motion users.

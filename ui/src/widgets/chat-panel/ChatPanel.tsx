@@ -9,7 +9,8 @@ import './ChatPanel.css'
 export function ChatPanel() {
   const { messages, isTyping, sendMessage, toggleFeedback } = useChat()
   const [supportOpen, setSupportOpen] = useState(true)
-  const { ref: scrollRef, onScroll: handleScroll } = useStickToBottom<HTMLDivElement>()
+  const userMessageCount = messages.filter((message) => message.role === 'user').length
+  const { ref: scrollRef, onScroll: handleScroll } = useStickToBottom<HTMLDivElement>(userMessageCount)
 
   return (
     <div className="chat-panel" role="complementary" aria-label="OptiBot">
